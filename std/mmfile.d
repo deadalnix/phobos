@@ -134,8 +134,10 @@ class MmFile
             char c = 0;
             core.sys.posix.unistd.write(fd, &c, 1);
         }
-        else if (prot & PROT_READ && size == 0)
+        else if (prot & PROT_READ && size == 0) {
+            if(statbuf.st_size == 0) return;
             size = statbuf.st_size;
+        }
         this.size = size;
 
         // Map the file into memory!
@@ -143,9 +145,9 @@ class MmFile
             ? 2*window : cast(size_t) size;
         auto p = mmap(address, initial_map, prot, flags, fd, 0);
         if (p == MAP_FAILED)
-        {
-            errnoEnforce(false, "Could not map file into memory");
-        }
+            {
+                errnoEnforce(false, "Could not map file into memory");
+            }
         data = p[0 .. initial_map];
     }
 
@@ -331,8 +333,10 @@ class MmFile
                     char c = 0;
                     core.sys.posix.unistd.write(fd, &c, 1);
                 }
-                else if (prot & PROT_READ && size == 0)
+                else if (prot & PROT_READ && size == 0) {
+                    if(statbuf.st_size == 0) return;
                     size = statbuf.st_size;
+                }
             }
             else
             {
@@ -344,14 +348,14 @@ class MmFile
                 ? 2*window : cast(size_t) size;
             p = mmap(address, initial_map, prot, flags, fd, 0);
             if (p == MAP_FAILED)
-            {
-                if (fd != -1)
                 {
-                    .close(fd);
-                    fd = -1;
+                    if (fd != -1)
+                        {
+                            .close(fd);
+                            fd = -1;
+                        }
+                    errnoEnforce(false, "Could not map file "~filename);
                 }
-                errnoEnforce(false, "Could not map file "~filename);
-            }
 
             data = p[0 .. initial_map];
         }
@@ -724,4 +728,20 @@ version (linux)
 {
     MmFile shar = new MmFile(null, MmFile.Mode.readWrite, 10, null, 0);
     void[] output = shar[0 .. $];
+}
+
+@system unittest // https://issues.dlang.org/show_bug.cgi?id=21657
+{
+    import std.file : deleteme, remove;
+    import std.typecons : scoped;
+
+    // map an empty file
+    auto fn = std.file.deleteme ~ "-testing.txt";
+    auto f = File(fn,"w"); // create the file
+
+    scope mf = new MmFile(fn);
+    assert(mf.length == 0);
+
+    scope mf2 = new MmFile(f);
+    assert(mf2.length == 0);
 }
