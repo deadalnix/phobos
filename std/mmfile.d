@@ -135,6 +135,7 @@ class MmFile
             core.sys.posix.unistd.write(fd, &c, 1);
         }
         else if (prot & PROT_READ && size == 0) {
+            // mmap of an empty file is an empty range
             if(statbuf.st_size == 0) return;
             size = statbuf.st_size;
         }
@@ -145,9 +146,9 @@ class MmFile
             ? 2*window : cast(size_t) size;
         auto p = mmap(address, initial_map, prot, flags, fd, 0);
         if (p == MAP_FAILED)
-            {
-                errnoEnforce(false, "Could not map file into memory");
-            }
+        {
+            errnoEnforce(false, "Could not map file into memory");
+        }
         data = p[0 .. initial_map];
     }
 
@@ -348,14 +349,14 @@ class MmFile
                 ? 2*window : cast(size_t) size;
             p = mmap(address, initial_map, prot, flags, fd, 0);
             if (p == MAP_FAILED)
+            {
+                if (fd != -1)
                 {
-                    if (fd != -1)
-                        {
-                            .close(fd);
-                            fd = -1;
-                        }
-                    errnoEnforce(false, "Could not map file "~filename);
+                    .close(fd);
+                    fd = -1;
                 }
+                errnoEnforce(false, "Could not map file "~filename);
+            }
 
             data = p[0 .. initial_map];
         }
@@ -754,10 +755,9 @@ version (linux)
 
     // map an empty file
     auto fn = std.file.deleteme ~ "-testing.txt";
-    scope(exit) std.file.remove(fn);
     auto f = File(fn,"w"); // create the file
 
-    import std.exception : verifyThrown = assertThrown;
     auto mf = new MmFile(fn, MmFile.Mode.readWrite, 0, null, 0);
+    scope(exit) std.file.remove(fn);
     assert(mf.length == 0);
 }
