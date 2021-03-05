@@ -335,6 +335,7 @@ class MmFile
                     core.sys.posix.unistd.write(fd, &c, 1);
                 }
                 else if (prot & PROT_READ && size == 0) {
+                    // mmap of an empty file is an empty range
                     if(statbuf.st_size == 0) return;
                     size = statbuf.st_size;
                 }
