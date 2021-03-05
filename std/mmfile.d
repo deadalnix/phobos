@@ -737,6 +737,7 @@ version (linux)
 
     // map an empty file
     auto fn = std.file.deleteme ~ "-testing.txt";
+    scope(exit) std.file.remove(fn);
     auto f = File(fn,"w"); // create the file
 
     scope mf = new MmFile(fn);
@@ -744,4 +745,19 @@ version (linux)
 
     scope mf2 = new MmFile(f);
     assert(mf2.length == 0);
+}
+
+@system unittest // https://issues.dlang.org/show_bug.cgi?id=21657
+{
+    import std.file : deleteme, remove;
+    import std.typecons : scoped;
+
+    // map an empty file
+    auto fn = std.file.deleteme ~ "-testing.txt";
+    scope(exit) std.file.remove(fn);
+    auto f = File(fn,"w"); // create the file
+
+    import std.exception : verifyThrown = assertThrown;
+    auto mf = new MmFile(fn, MmFile.Mode.readWrite, 0, null, 0);
+    assert(mf.length == 0);
 }
