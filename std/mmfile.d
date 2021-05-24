@@ -134,8 +134,11 @@ class MmFile
             char c = 0;
             core.sys.posix.unistd.write(fd, &c, 1);
         }
-        else if (prot & PROT_READ && size == 0)
+        else if (prot & PROT_READ && size == 0) {
+            // mmap of an empty file is an empty range
+            if(statbuf.st_size == 0) return;
             size = statbuf.st_size;
+        }
         this.size = size;
 
         // Map the file into memory!
@@ -331,8 +334,11 @@ class MmFile
                     char c = 0;
                     core.sys.posix.unistd.write(fd, &c, 1);
                 }
-                else if (prot & PROT_READ && size == 0)
+                else if (prot & PROT_READ && size == 0) {
+                    // mmap of an empty file is an empty range
+                    if(statbuf.st_size == 0) return;
                     size = statbuf.st_size;
+                }
             }
             else
             {
@@ -702,26 +708,55 @@ version (linux)
 
 // https://issues.dlang.org/show_bug.cgi?id=14994
 // https://issues.dlang.org/show_bug.cgi?id=14995
-@system unittest
-{
-    import std.file : deleteme;
-    import std.typecons : scoped;
+// @system unittest
+// {
+//     import std.file : deleteme;
+//     import std.typecons : scoped;
 
-    // Zero-length map may or may not be valid on OSX and NetBSD
-    version (OSX)
-        import std.exception : verifyThrown = collectException;
-    version (NetBSD)
-        import std.exception : verifyThrown = collectException;
-    else
-        import std.exception : verifyThrown = assertThrown;
+//     // Zero-length map may or may not be valid on OSX and NetBSD
+//     version (OSX)
+//         import std.exception : verifyThrown = collectException;
+//     version (NetBSD)
+//         import std.exception : verifyThrown = collectException;
+//     else
+//         import std.exception : verifyThrown = assertThrown;
 
-    auto fn = std.file.deleteme ~ "-testing.txt";
-    scope(exit) std.file.remove(fn);
-    verifyThrown(scoped!MmFile(fn, MmFile.Mode.readWrite, 0, null));
-}
+//     auto fn = std.file.deleteme ~ "-testing.txt";
+//     scope(exit) std.file.remove(fn);
+//     verifyThrown(scoped!MmFile(fn, MmFile.Mode.readWrite, 0, null));
+// }
 
 @system unittest
 {
     MmFile shar = new MmFile(null, MmFile.Mode.readWrite, 10, null, 0);
     void[] output = shar[0 .. $];
+}
+
+@system unittest // https://issues.dlang.org/show_bug.cgi?id=21657
+{
+    // map an empty file - read mode
+    auto fn_r = std.file.deleteme ~ "-testing.txt";
+    auto f_r = File(fn_r,"w");
+    f_r.write(""); // actually create the file, it is empty
+    scope(exit) std.file.remove(fn_r);
+
+    scope mf_r = new MmFile(fn_r);
+    assert(mf_r.length == 0);
+    scope mf2 = new MmFile(f_r);
+    assert(mf2.length == 0);
+
+    // map an empty file - readWrite mode
+    auto fn_rw = std.file.deleteme ~ "-testing.txt";
+    auto mf_rw = new MmFile(fn_rw, MmFile.Mode.readWrite, 0, null, 0);
+    assert(mf_rw.length == 0);
+
+    // map an empty file - readWriteNew mode - NOT TESTED since assertion (see l294)
+    // auto fn_rwn = std.file.deleteme ~ "-testing.txt";
+    // auto mf_rwn = new MmFile(fn_rwn, MmFile.Mode.readWriteNew, 0, null, 0);
+    // assert(mf_rwn.length == 0);
+
+    // map an empty file - readCopyOnWrite mode
+    auto fn_rcow = std.file.deleteme ~ "-testing.txt";
+    auto mf_rcow = new MmFile(fn_rcow, MmFile.Mode.readCopyOnWrite, 0, null, 0);
+    assert(mf_rcow.length == 0);
 }
